@@ -1,8 +1,11 @@
+use std::ptr::null;
 use bevy::ecs::component::{ComponentId, Components, StorageType};
 use bevy::ecs::storage::Storages;
 use bevy::prelude::*;
 use bevy::ptr::OwningPtr;
 use bevy::window::PrimaryWindow;
+
+const COLS: i32 =  10;
 
 fn main() {
     App::new()
@@ -12,30 +15,36 @@ fn main() {
         .add_startup_system(spawn_timer)
         .add_system(move_blocks_up)
         .add_system(update_board)
+        .add_system(fall_system)
         .run()
 }
 
 #[derive(Component)]
 pub struct BoardTimer {
-    time_since_tick: f32
+    time_since_tick: f32,
+    fall_timer: f32
 }
 
 impl Default for BoardTimer {
     fn default() -> Self {
         BoardTimer {
-            time_since_tick: 0.0
+            time_since_tick: 0.0,
+            fall_timer: 0.0
         }
     }
 }
 
 impl BoardTimer {
     pub fn tick(&mut self, mut board: Query<&mut Block>) {
-        if self.time_since_tick > 1.0 {
-            println!("Tick!");
-            for mut block in board.iter_mut() {
-                block.y += 1;
+        let should_tick = false;
+        if should_tick {
+            if self.time_since_tick > 1.0 {
+                println!("Tick!");
+                for mut block in board.iter_mut() {
+                    block.y += 1;
+                }
+                self.time_since_tick = 0.0;
             }
-            self.time_since_tick = 0.0;
         }
     }
 
@@ -65,8 +74,16 @@ pub fn update_board(
 #[derive(Component)]
 pub struct Block {
     x: i32,
-    y: i32
+    y: i32,
 }
+
+#[derive(Component)]
+pub struct Falling {
+    timer: f32
+}
+
+#[derive(Component)]
+pub struct Removed {}
 
 pub fn spawn_blocks(
     mut commands: Commands,
@@ -74,28 +91,28 @@ pub fn spawn_blocks(
     asset_server: Res<AssetServer>
 ) {
     let window = window_query.get_single().unwrap();
-    let cols = 10;
     let left = window.width() * 0.1;
     let top = window.height() * 0.1;
-    let block_width = (window.width() * 0.8) / cols as f32;
+    let block_width = (window.width() * 0.8) / COLS as f32;
 
-    for i in 0..10 {
-        for j in 0..cols {
+    for i in 0..5 {
+        for j in 0..COLS {
             let x = left.clone() + (j.clone() as f32 * block_width.clone());
             let y = top.clone() + (i.clone() as f32 * block_width.clone());
-            commands.spawn(
+            let mut block = Block {
+                x: j.clone(),
+                y: i.clone()
+            };
+            let id = commands.spawn(
                 (
-                    Block {
-                        x: j.clone(),
-                        y: i.clone()
-                    },
+                    block,
                     SpriteBundle {
                         transform: Transform::from_xyz(x, y, 0.0),
                         texture: asset_server.load("sprites/ball_blue_large.png"),
                         ..default()
                     },
                 )
-            );
+            ).id();
         }
     }
 }
@@ -118,6 +135,44 @@ pub fn move_blocks_up(
     mut block_query: Query<&mut Transform, With<Block>>
 ) {
     for (mut transform) in block_query.iter_mut() {
-        transform.translation.y += 1.0;
+        transform.translation.y += 0.0;
     }
 }
+
+pub fn fall_system(
+    mut commands: Commands,
+    time: Res<Time>,
+    mut board: Query<(Entity, &Block)>,
+    mut removed_blocks_query: Query<(Entity, &Block), With<Removed>>,
+    keys: Res<Input<KeyCode>>
+) {
+    if keys.just_pressed(KeyCode::Space) {
+        for (e, block) in board.iter() {
+            println!("x: {}, y: {}", block.x, block.y);
+            commands.entity(e).insert(Removed{});
+            return;
+        }
+    }
+    let removed_positions: Vec<(i32, i32)> = removed_blocks_query.iter().map(|(entity, block)|  {
+        (block.x, block.y)
+    } ).collect();
+
+    // println!("{:?}", removed_positions);
+
+    for(e, block) in board.iter() {
+        for (rx, ry) in &removed_positions {
+            if (block.x == *rx) && (block.y > *ry) {
+                commands.entity(e).insert(Falling{ timer: 0.0 });
+            }
+        }
+    }
+
+    for (entity, block) in removed_blocks_query.iter() {
+        commands.entity(entity).despawn();
+    };
+}
+//
+// pub fn update_falling(
+//     commands:
+// )
+
