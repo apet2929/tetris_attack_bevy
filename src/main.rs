@@ -171,8 +171,34 @@ pub fn fall_system(
         commands.entity(entity).despawn();
     };
 }
-//
-// pub fn update_falling(
-//     commands:
-// )
+
+pub fn update_falling(
+    mut commands: Commands,
+    mut board: Query<(Entity, &mut Block, &mut Transform, Option<&mut Falling>)>,
+    time: Res<Time>
+) {
+    for (entity, mut block,mut transform, mut fall) in board.iter_mut() {
+        if let Some(mut falling) = fall {
+            if falling.timer > 0.3 {
+                let column: Vec<&Block> = board.iter()
+                    .filter(|(e, b, t, f)| b.x == block.x)
+                    .map(|(e, b,t,  f)| b).collect();
+                if block.y > 0 {
+                    let block_below = column.iter().filter(|b| b.y == block.y - 1).count() > 0;
+                    if !block_below { // no block below
+                        block.y -= 1;
+                        transform.translation.y -= 32.0;
+                    }
+                } else {
+                    println!("Removing falling");
+                    commands.entity(entity).remove::<Falling>();
+                }
+
+            } else {
+                falling.timer += time.delta_seconds();
+            }
+        }
+
+    }
+}
 
